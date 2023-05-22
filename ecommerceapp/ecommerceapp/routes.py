@@ -111,11 +111,14 @@ def cart_detail(current_user):
         })
     return jsonify(res), 200
 
-@app.route('/api/auth/consumer/cart', methods=['POST', 'PUT'])
+@app.route('/api/auth/consumer/cart', methods=['POST', 'PUT', 'DELETE'])
 @token_required
 def update_cart_detail(current_user):
-	product_id = request.json['product_id']
-	quantity = request.json['quantity']
+	if request.method == 'DELETE':
+		product_id = request.json['product_id']
+	else:
+		product_id = request.json['product_id']
+		quantity = request.json['quantity']
 	cart = Cart.query.filter_by(user_id = current_user.user_id).first()
 	product = Product.query.filter_by(product_id = product_id).first()
 	if not cart or not product:
@@ -135,8 +138,54 @@ def update_cart_detail(current_user):
 		if cart_product:
 			cart.total_amount = cart.total_amount - cart_product.quantity * product.price + quantity * product.price
 			cart_product.quantity = quantity
-
-	db.session.add(cart_product)
+	if request.method == 'POST' or request.method == 'PUT':
+		db.session.add(cart_product)
+	else:
+		cart.total_amount -= cart_product.quantity * product.price
+		db.session.delete(cart_product)
 	db.session.add(cart)
 	db.session.commit()
 	return str(cart.total_amount), 200
+
+
+@app.route('/api/auth/seller/product', methods=['GET'])
+@token_required
+def get_products(current_user):
+	products = db.session.query(User, Product, Category).select_from(User).join(Product).join(Category).filter(User.user_id == current_user.user_id).all()
+	if not products:
+		return '', 403
+	res = []
+	for user, product, category in products:
+		res.append({
+				"category": {
+				"category_id": category.category_id,
+				"category_name": category.category_name
+			},
+			"price": product.price,
+			"product_id": product.product_id,
+			"product_name": product.product_name,
+			"seller_id": product.seller_id
+		})
+	return jsonify(res), 200
+
+
+@app.route('/api/auth/seller/product/<int:product_id>', methods=['GET'])
+@token_required
+def get_single_product(current_user, product_id):
+	products = db.session.query(User, Product, Category).select_from(User).join(Product, Product.product_id == product_id).join(Category).filter(User.user_id == current_user.user_id).all()
+	print(products)
+	if not products:
+		return '', 403
+	res = []
+	for user, product, category in products:
+		res.append({
+				"category": {
+				"category_id": category.category_id,
+				"category_name": category.category_name
+			},
+			"price": product.price,
+			"product_id": product.product_id,
+			"product_name": product.product_name,
+			"seller_id": product.seller_id
+		})
+	return jsonify(res), 200
