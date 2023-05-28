@@ -169,15 +169,23 @@ def get_products(current_user):
 	return jsonify(res), 200
 
 
-@app.route('/api/auth/seller/product/<int:product_id>', methods=['GET'])
+@app.route('/api/auth/seller/product/<int:product_id>', methods=['GET', 'DELETE'])
 @token_required
 def get_single_product(current_user, product_id):
-	products = db.session.query(User, Product, Category).select_from(User).join(Product, Product.product_id == product_id).join(Category).filter(User.user_id == current_user.user_id).all()
+	if current_user.user_role == 1:
+		return '', 403
+	products = db.session.query(Product, Category).select_from(User).join(Product).join(Category).filter(User.user_id == current_user.user_id).filter(Product.product_id == product_id).all()
 	print(products)
 	if not products:
-		return '', 403
+		return '', 404
+	
+	if request.method == 'DELETE':
+		db.session.delete(products[0][0])
+		db.session.commit()
+		return '', 200
+
 	res = []
-	for user, product, category in products:
+	for product, category in products:
 		res.append({
 				"category": {
 				"category_id": category.category_id,
@@ -189,3 +197,41 @@ def get_single_product(current_user, product_id):
 			"seller_id": product.seller_id
 		})
 	return jsonify(res), 200
+
+
+@app.route('/api/auth/seller/product', methods=['POST', 'PUT'])
+@token_required
+def add_product(current_user):
+	if current_user.user_role == 1:
+		return '', 403
+	if request.method == 'POST':
+		product_id = request.json['product_id']
+		product = Product.query.filter_by(product_id = product_id).first()
+		if product:
+			return '', 409
+		product_name = request.json['product_name']
+		price = request.json['price']
+		category_id = request.json['category_id']
+
+		new_product = Product(
+			product_id = product_id,
+			product_name = product_name,
+			price = price,
+			seller_id = current_user.user_id,
+			category_id = category_id
+		)
+		db.session.add(new_product)
+		db.session.commit()
+		return str(product_id), 201
+	if request.method == 'PUT':
+		product_id = request.json['product_id']
+		product = Product.query.filter(Product.seller_id == current_user.user_id).filter(Product.product_id == product_id).first()
+
+		if product:
+			product.price = request.json['price']
+		else:
+			return '', 404
+		
+		db.session.add(product)
+		db.session.commit()
+		return '', 200
