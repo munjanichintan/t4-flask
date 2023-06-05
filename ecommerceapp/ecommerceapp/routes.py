@@ -68,17 +68,17 @@ def login():
             token = jwt.encode({
             'id': user.user_id
         }, app.config['SECRET_KEY'], algorithm='HS256')
-            return jsonify(token = token), 200
-    return '', 401
+            return jsonify(token = token), 200 # OK
+    return '', 401 # unauthorized
 
 
 @app.route('/api/public/product/search', methods=['GET'])
 def product():
     args = request.args
-    products = db.session.query(Product, Category).join(Product, Product.category_id == Category.category_id).filter(Product.product_name == args.get("keyword")).all()
+    products = db.session.query(Product, Category).join(Category).filter(Product.product_name == args.get("keyword")).all()
     res = []
     if not products:
-        return '', 400
+        return '', 400 # Bad Request
     for product, category in products:
         res.append({"category": {"category_id": category.category_id, "category_name": category.category_name}, "price": product.price, "product_name": product.product_name, "product_id": product.product_id, "seller_id": product.seller_id})
     
@@ -88,11 +88,13 @@ def product():
 @app.route('/api/auth/consumer/cart', methods=['GET'])
 @token_required
 def cart_detail(current_user):
-    total_detail = db.session.query(Cart, User, CartProduct, Product, Category).select_from(User).join(Cart).join(CartProduct).join(Product).join(Category).filter(User.user_id == current_user.user_id).all()
+    total_detail = db.session.query(Cart, CartProduct, Product, Category).select_from(Cart).join(CartProduct).join(Product).join(Category).filter(Cart.user_id == current_user.user_id).all()
+    print(total_detail)
     res = []
     if not total_detail:
-          return '', 403
-    for cart, user, cart_product, product, cateogry in total_detail:
+          return '', 403 # forbidden
+    
+    for cart, cart_product, product, cateogry in total_detail:
         res.append({
             "cartproducts": {
                 "product": {
